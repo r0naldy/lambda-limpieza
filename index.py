@@ -22,8 +22,7 @@ def is_numeric(value):
         return False
 
 def sanitize_country(value):
-    return re.sub(r'[^\w\s]', '', value).strip()  # elimina emojis y símbolos
-
+    return re.sub(r'[^\w\s]', '', value).strip()
 def lambda_handler(event, context):
     try:
         bucket = event['Records'][0]['s3']['bucket']['name']
