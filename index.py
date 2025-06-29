@@ -23,7 +23,7 @@ def is_numeric(value):
 
 def sanitize_country(value):
     return re.sub(r'[^\w\s]', '', value).strip()
-def lambda_handler(event, context):
+def handler(event, context):
     try:
         bucket = event['Records'][0]['s3']['bucket']['name']
         key    = event['Records'][0]['s3']['object']['key']
@@ -71,7 +71,7 @@ def lambda_handler(event, context):
             # 7: PRODUCTCODE - truncar a 15 caracteres
             row['PRODUCTCODE'] = row.get('PRODUCTCODE', '')[:15]
 
-            # 8 y 9: ORDERNUMBER / ORDERLINENUMBER - eliminar si vacío o no numérico
+            # 8 y 9: ORDERNUMBER / ORDERLINENUMBER - eliminar si vacío o no numéricos
             if not row.get('ORDERNUMBER') or not row['ORDERNUMBER'].isdigit():
                 continue
             if not row.get('ORDERLINENUMBER') or not row['ORDERLINENUMBER'].isdigit():
