@@ -43,7 +43,7 @@ def sanitize_phone(phone):
 def is_valid_numericcode(code):
     return code.isdigit() if code else False
 
-def lambda_handler(event, context):
+def handler(event, context):
     try:
         bucket_name = event['Records'][0]['s3']['bucket']['name']
         object_key  = event['Records'][0]['s3']['object']['key']
