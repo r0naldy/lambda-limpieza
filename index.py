@@ -121,5 +121,5 @@ def handler(event, context):
         print("❌ Error:", e)
         return {
             'statusCode': 500,
-            'body': f'Error al procesar archivo: {str(e)}'
+            'body': f'Error al procesar archivos: {str(e)}'
         }
