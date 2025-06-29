@@ -8,11 +8,13 @@ from datetime import datetime
 s3 = boto3.client('s3')
 
 def is_valid_date(date_str):
-    try:
-        datetime.strptime(date_str, "%Y-%m-%d")
-        return True
-    except:
-        return False
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y"):
+        try:
+            datetime.strptime(date_str.strip(), fmt)
+            return True
+        except:
+            continue
+    return False
 
 def is_numeric(value):
     try:
