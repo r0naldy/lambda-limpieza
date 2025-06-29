@@ -8,7 +8,8 @@ from datetime import datetime
 s3 = boto3.client('s3')
 
 def is_valid_date(date_str):
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y"):
+    formats = ["%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y", "%m/%d/%Y %H:%M", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p"]
+    for fmt in formats:
         try:
             datetime.strptime(date_str.strip(), fmt)
             return True
@@ -25,6 +26,7 @@ def is_numeric(value):
 
 def sanitize_country(value):
     return re.sub(r'[^\w\s]', '', value).strip()
+
 def handler(event, context):
     try:
         bucket = event['Records'][0]['s3']['bucket']['name']
@@ -85,16 +87,8 @@ def handler(event, context):
             if not row.get('ORDERLINENUMBER') or not row['ORDERLINENUMBER'].isdigit():
                 continue
 
-            # 13: PRODUCTLINE - truncar a 30 caracteres
-            row['PRODUCTLINE'] = row.get('PRODUCTLINE', '')[:30]
-
-            # 14: NUMERICCODE - descartar si contiene letras
-            if not is_numeric(row.get('NUMERICCODE', '')):
-                continue
-
-            # 18: ORDERLINENUMBER - descartar si texto tipo "LINEA-X"
-            if not row['ORDERLINENUMBER'].isdigit():
-                continue
+            # 13: PRODUCTLINE - truncar a 60 caracteres
+            row['PRODUCTLINE'] = row.get('PRODUCTLINE', '')[:60]
 
             # 19: COUNTRY - quitar emojis
             row['COUNTRY'] = sanitize_country(row.get('COUNTRY', ''))
