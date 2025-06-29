@@ -179,7 +179,7 @@ def lambda_handler(event, context):
 
         return {
             'statusCode': 200,
-            'body': f'✅ Archivo procesado exitosamente: {output_key}'
+            'body': f' Archivo procesado exitosamente: {output_key}'
         }
 
     except Exception as e:
