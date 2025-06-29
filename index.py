@@ -30,7 +30,13 @@ def handler(event, context):
 
         # Leer CSV desde S3
         response = s3.get_object(Bucket=bucket, Key=key)
-        csv_content = response['Body'].read().decode('utf-8')
+        body = response['Body'].read()
+
+        try:
+            csv_content = body.decode('utf-8')
+        except UnicodeDecodeError:
+            csv_content = body.decode('latin-1')  # Manejo alternativo
+
         reader = csv.DictReader(io.StringIO(csv_content))
 
         clean_data = []
