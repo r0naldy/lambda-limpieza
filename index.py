@@ -7,19 +7,14 @@ from datetime import datetime
 
 s3 = boto3.client('s3')
 
-def is_valid_date(date_str):
-    formats = ["%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y", "%m/%d/%Y %H:%M", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p"]
-    for fmt in formats:
-        try:
-            datetime.strptime(date_str.strip(), fmt)
-            return True
-        except:
-            continue
-    return False
+# Formatos de fecha aceptados
+DATE_FORMATS = [
+    "%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y",
+    "%m/%d/%Y %H:%M", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p"
+]
 
-def normalize_date(date_str):
-    formats = ["%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y", "%m/%d/%Y %H:%M", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p"]
-    for fmt in formats:
+def parse_date(date_str):
+    for fmt in DATE_FORMATS:
         try:
             return datetime.strptime(date_str.strip(), fmt).strftime('%Y-%m-%d')
         except:
@@ -33,15 +28,27 @@ def is_numeric(value):
     except:
         return False
 
-def sanitize_country(value):
+def sanitize_text(value):
+    if not value:
+        return ""
     return re.sub(r'[^\w\s]', '', value).strip()
 
-def handler(event, context):
-    try:
-        bucket = event['Records'][0]['s3']['bucket']['name']
-        key    = event['Records'][0]['s3']['object']['key']
+def sanitize_phone(phone):
+    if not phone:
+        return None
+    # Quitar todo lo que no sea número, mantener el orden
+    cleaned = re.sub(r'\D', '', phone)
+    return cleaned if len(cleaned) >= 7 else None
 
-        response = s3.get_object(Bucket=bucket, Key=key)
+def is_valid_numericcode(code):
+    return code.isdigit() if code else False
+
+def lambda_handler(event, context):
+    try:
+        bucket_name = event['Records'][0]['s3']['bucket']['name']
+        object_key  = event['Records'][0]['s3']['object']['key']
+
+        response = s3.get_object(Bucket=bucket_name, Key=object_key)
         body = response['Body'].read()
 
         try:
@@ -51,10 +58,9 @@ def handler(event, context):
 
         reader = csv.DictReader(io.StringIO(csv_content))
 
-        clean_data = []
-        seen = set()
+        clean_rows = []
+        seen_rows = set()
 
-        # Mapeo de países a territorios
         territory_map = {
             "USA": "NA",
             "France": "EMEA",
@@ -66,92 +72,108 @@ def handler(event, context):
         }
 
         for row in reader:
-            # Validación de QUANTITYORDERED
-            if not row.get('QUANTITYORDERED') or row['QUANTITYORDERED'].strip() in ["", "0"]:
+            # QUANTITYORDERED
+            qty = row.get('QUANTITYORDERED', '').strip()
+            if not qty or qty == "0" or not qty.isdigit():
                 continue
+            row['QUANTITYORDERED'] = int(qty)
 
-            # Validación PRICEEACH
-            if not is_numeric(row.get('PRICEEACH', '')) or float(row['PRICEEACH']) < 0:
+            # PRICEEACH
+            price = row.get('PRICEEACH', '').strip()
+            if not is_numeric(price) or float(price) < 0:
                 continue
-            row['PRICEEACH'] = float(row['PRICEEACH'])
+            row['PRICEEACH'] = float(price)
 
-            # STATUS - corrección
+            # STATUS
             status = row.get('STATUS', '').strip().upper()
-            if status == "DLEIVERED":
-                row['STATUS'] = "DELIVERED"
-            elif status == "":
-                row['STATUS'] = "UNKNOWN"
-            else:
-                row['STATUS'] = status
+            row['STATUS'] = "DELIVERED" if status == "DLEIVERED" else (status or "UNKNOWN")
 
-            # Validación y normalización de ORDERDATE
-            normalized_date = normalize_date(row.get('ORDERDATE', ''))
-            if not normalized_date:
+            # ORDERDATE
+            order_date = parse_date(row.get('ORDERDATE', ''))
+            if not order_date:
                 continue
-            row['ORDERDATE'] = normalized_date
+            row['ORDERDATE'] = order_date
 
-            # Validación SALES
-            if not is_numeric(row.get('SALES', '')):
+            # SALES
+            sales_str = row.get('SALES', '').strip()
+            if not is_numeric(sales_str):
                 continue
-            calculated_sales = float(row['QUANTITYORDERED']) * float(row['PRICEEACH'])
-            if abs(float(row['SALES']) - calculated_sales) > 0.1:
-                row['SALES'] = round(calculated_sales, 2)
-            else:
-                row['SALES'] = float(row['SALES'])
+            sales = float(sales_str)
+            calc_sales = row['QUANTITYORDERED'] * row['PRICEEACH']
+            row['SALES'] = round(calc_sales, 2) if abs(sales - calc_sales) > 0.1 else sales
 
-            # Validación MSRP
-            if is_numeric(row.get('MSRP', '')):
-                if float(row['PRICEEACH']) > float(row['MSRP']):
-                    row['MSRP_ISSUE'] = True
-                row['MSRP'] = float(row['MSRP'])
+            # MSRP
+            msrp_str = row.get('MSRP', '').strip()
+            if is_numeric(msrp_str):
+                msrp = float(msrp_str)
+                row['MSRP'] = msrp
+                row['MSRP_ISSUE'] = row['PRICEEACH'] > msrp
             else:
                 row['MSRP'] = None
+                row['MSRP_ISSUE'] = False
 
-            # Evitar duplicados
-            unique_key = json.dumps(row, sort_keys=True)
-            if unique_key in seen:
-                continue
-            seen.add(unique_key)
-
-            # PRODUCTCODE truncado
+            # PRODUCTCODE (máx 15)
             row['PRODUCTCODE'] = row.get('PRODUCTCODE', '')[:15]
 
-            # Validación ORDERNUMBER y ORDERLINENUMBER
-            if not row.get('ORDERNUMBER') or not row['ORDERNUMBER'].isdigit():
+            # ORDERNUMBER y ORDERLINENUMBER
+            if not row.get('ORDERNUMBER', '').isdigit():
                 continue
-            if not row.get('ORDERLINENUMBER') or not row['ORDERLINENUMBER'].isdigit():
+            if not row.get('ORDERLINENUMBER', '').isdigit():
                 continue
 
-            # PRODUCTLINE truncado
+            # PRODUCTLINE (máx 60)
             row['PRODUCTLINE'] = row.get('PRODUCTLINE', '')[:60]
 
-            # COUNTRY sanitizado
-            row['COUNTRY'] = sanitize_country(row.get('COUNTRY', ''))
+            # COUNTRY
+            country = sanitize_text(row.get('COUNTRY', ''))
+            row['COUNTRY'] = country
 
-            # CITY por defecto
-            row['CITY'] = row.get('CITY', '').strip() or "SIN CIUDAD"
+            # CITY
+            city = row.get('CITY', '').strip()
+            row['CITY'] = city if city else "SIN CIUDAD"
 
-            # TERRITORY por COUNTRY
-            if not row.get('TERRITORY') and row['COUNTRY'] in territory_map:
-                row['TERRITORY'] = territory_map[row['COUNTRY']]
+            # TERRITORY
+            if not row.get('TERRITORY'):
+                row['TERRITORY'] = territory_map.get(country, '')
 
-            # POSTALCODE validación básica
-            if not row.get('POSTALCODE') or not re.search(r'\d', row['POSTALCODE']):
+            # POSTALCODE
+            postal_code = row.get('POSTALCODE', '')
+            if not postal_code or not re.search(r'\d', postal_code):
                 row['POSTALCODE'] = None
 
-            # STATE para USA
-            if row.get('COUNTRY') == "USA" and not row.get('STATE'):
+            # STATE (solo si es USA)
+            if country == "USA" and not row.get('STATE'):
                 row['STATE'] = "UNKNOWN"
 
-            # Agregar fila limpia
-            clean_data.append(row)
+            # PHONE
+            row['PHONE'] = sanitize_phone(row.get('PHONE', ''))
 
-        # Guardar resultado
-        output_key = key.replace('.csv', '.json')
+            # CONTACTS
+            row['CONTACTLASTNAME'] = sanitize_text(row.get('CONTACTLASTNAME', ''))
+            row['CONTACTFIRSTNAME'] = sanitize_text(row.get('CONTACTFIRSTNAME', ''))
+
+            # DEALSIZE
+            row['DEALSIZE'] = sanitize_text(row.get('DEALSIZE', ''))
+
+            # NUMERICCODE
+            num_code = row.get('NUMERICCODE', '').strip()
+            row['NUMERICCODE'] = num_code if is_valid_numericcode(num_code) else None
+
+            # Verificar duplicado
+            key_unique = json.dumps(row, sort_keys=True)
+            if key_unique in seen_rows:
+                continue
+            seen_rows.add(key_unique)
+
+            # Agregar fila limpia
+            clean_rows.append(row)
+
+        # Guardar JSON
+        output_key = object_key.rsplit('.', 1)[0] + '.json'
         s3.put_object(
             Bucket='bucket-json-clear',
             Key=output_key,
-            Body=json.dumps(clean_data, indent=2, ensure_ascii=False),
+            Body=json.dumps(clean_rows, indent=2, ensure_ascii=False),
             ContentType='application/json'
         )
 
@@ -161,7 +183,7 @@ def handler(event, context):
         }
 
     except Exception as e:
-        print("❌ Error:", e)
+        print("Error:", e)
         return {
             'statusCode': 500,
             'body': f'Error al procesar archivos: {str(e)}'
