@@ -86,7 +86,6 @@ def handler(event, context):
             status = row.get('STATUS', '').strip().upper()
             row['STATUS'] = "DELIVERED" if status == "DLEIVERED" else (status or "UNKNOWN")
 
-            # ORDERDATE
             order_date = parse_date(row.get('ORDERDATE', ''))
             if not order_date:
                 continue
@@ -120,7 +119,6 @@ def handler(event, context):
             country = sanitize_text(row.get('COUNTRY', ''))
             row['COUNTRY'] = country
 
-            # CITY
             city = row.get('CITY', '').strip()
             row['CITY'] = city if city else "SIN CIUDAD"
 
