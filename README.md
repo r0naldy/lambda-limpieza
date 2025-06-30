@@ -73,7 +73,7 @@ import re
 from datetime import datetime
 ```
 
-No se agregaron dependencias externas como `pandas` o `matploit` ya que esas librerias superan el límite de 50MB que impone AWS para las subida del zip al lambda.
+No se agregaron dependencias externas como `pandas` o `matploit` ya que esas librerias superan el límite de 50MB que impone AWS para las subida del zip a la funcion lambda.
 
 ---
 
