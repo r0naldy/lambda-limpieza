@@ -1,12 +1,12 @@
 # lambda-limpieza
 
-# 🧼 CSV Cleaner con AWS Lambda + S3
+## CSV Cleaner con AWS Lambda + S3
 
 Este proyecto implementa una función AWS Lambda que se activa automáticamente cuando se sube un archivo CSV a un bucket de entrada del S3. La función lambda limpia, transforma y valida los datos del archivo, aplicando 20 reglas de negocio, y luego guarda el resultado en formato JSON que se envía a otro bucket de salida con los archivos procesados.
 
 ---
 
-## 📌 Funcionalidad
+## Funcionalidad
 
 - Escucha eventos de carga de archivos en un bucket S3 (archivo `.csv`)
 - Procesa cada fila del archivo:
@@ -19,7 +19,7 @@ Este proyecto implementa una función AWS Lambda que se activa automáticamente 
 
 ---
 
-## 🧠 Reglas de negocio aplicadas
+## Reglas de negocio aplicadas
 
 Estas son las 20 reglas implementadas en el código de limpieza y validación:
 
@@ -46,7 +46,7 @@ Estas son las 20 reglas implementadas en el código de limpieza y validación:
 
 ---
 
-## 🏗️ Arquitectura
+## Arquitectura
 
 ```
 [S3 Bucket - CSV Entrada]
@@ -145,7 +145,7 @@ Fila 2 descartada: ORDERDATE inválido, QUANTITYORDERED inválido, PRICEEACH inv
 
 ---
 
-## Despliegue
+## Despliegue del EC2
 
 ### 1. Crear función Lambda en AWS
 
@@ -156,11 +156,5 @@ Fila 2 descartada: ORDERDATE inválido, QUANTITYORDERED inválido, PRICEEACH inv
 
 - Tipo: Evento `s3:ObjectCreated:*`
 - Archivo esperado: `.csv`
-
----
-
-## Licencia
-
-Este proyecto está bajo licencia MIT. Puedes usarlo, modificarlo y distribuirlo libremente.
 
 ---
