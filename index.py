@@ -7,6 +7,7 @@ from datetime import datetime
 
 s3 = boto3.client('s3')
 
+
 DATE_FORMATS = [
     "%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y",
     "%m/%d/%Y %H:%M", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p"
@@ -35,6 +36,7 @@ def sanitize_text(value):
 def sanitize_phone(phone):
     if not phone:
         return None
+    # Quitar todo lo que no sea número, mantener el orden
     cleaned = re.sub(r'\D', '', phone)
     return cleaned if len(cleaned) >= 7 else None
 
@@ -70,25 +72,29 @@ def handler(event, context):
         }
 
         for row in reader:
-
+            # QUANTITYORDERED
             qty = row.get('QUANTITYORDERED', '').strip()
             if not qty or qty == "0" or not qty.isdigit():
                 continue
             row['QUANTITYORDERED'] = int(qty)
 
+            # PRICEEACH
             price = row.get('PRICEEACH', '').strip()
             if not is_numeric(price) or float(price) < 0:
                 continue
             row['PRICEEACH'] = float(price)
 
+            # STATUS
             status = row.get('STATUS', '').strip().upper()
             row['STATUS'] = "DELIVERED" if status == "DLEIVERED" else (status or "UNKNOWN")
 
+            # ORDERDATE
             order_date = parse_date(row.get('ORDERDATE', ''))
             if not order_date:
                 continue
             row['ORDERDATE'] = order_date
 
+            # SALES
             sales_str = row.get('SALES', '').strip()
             if not is_numeric(sales_str):
                 continue
@@ -96,6 +102,7 @@ def handler(event, context):
             calc_sales = row['QUANTITYORDERED'] * row['PRICEEACH']
             row['SALES'] = round(calc_sales, 2) if abs(sales - calc_sales) > 0.1 else sales
 
+            # MSRP
             msrp_str = row.get('MSRP', '').strip()
             if is_numeric(msrp_str):
                 msrp = float(msrp_str)
@@ -105,48 +112,63 @@ def handler(event, context):
                 row['MSRP'] = None
                 row['MSRP_ISSUE'] = False
 
+            # PRODUCTCODE (máx 15)
             row['PRODUCTCODE'] = row.get('PRODUCTCODE', '')[:15]
 
+            # ORDERNUMBER y ORDERLINENUMBER
             if not row.get('ORDERNUMBER', '').isdigit():
                 continue
             if not row.get('ORDERLINENUMBER', '').isdigit():
                 continue
 
+            # PRODUCTLINE (máx 60)
             row['PRODUCTLINE'] = row.get('PRODUCTLINE', '')[:60]
 
+            # COUNTRY
             country = sanitize_text(row.get('COUNTRY', ''))
             row['COUNTRY'] = country
 
+            # CITY
             city = row.get('CITY', '').strip()
             row['CITY'] = city if city else "SIN CIUDAD"
 
+            # TERRITORY
             if not row.get('TERRITORY'):
                 row['TERRITORY'] = territory_map.get(country, '')
 
+            # POSTALCODE
             postal_code = row.get('POSTALCODE', '')
             if not postal_code or not re.search(r'\d', postal_code):
                 row['POSTALCODE'] = None
 
+            # STATE (solo si es USA)
             if country == "USA" and not row.get('STATE'):
                 row['STATE'] = "UNKNOWN"
 
+            # PHONE
             row['PHONE'] = sanitize_phone(row.get('PHONE', ''))
 
+            # CONTACTS
             row['CONTACTLASTNAME'] = sanitize_text(row.get('CONTACTLASTNAME', ''))
             row['CONTACTFIRSTNAME'] = sanitize_text(row.get('CONTACTFIRSTNAME', ''))
 
+            # DEALSIZE
             row['DEALSIZE'] = sanitize_text(row.get('DEALSIZE', ''))
 
+            # NUMERICCODE
             num_code = row.get('NUMERICCODE', '').strip()
             row['NUMERICCODE'] = num_code if is_valid_numericcode(num_code) else None
 
+            # Verificar duplicado
             key_unique = json.dumps(row, sort_keys=True)
             if key_unique in seen_rows:
                 continue
             seen_rows.add(key_unique)
 
+            # Agregar fila limpia
             clean_rows.append(row)
 
+        # Guardar JSON
         output_key = object_key.rsplit('.', 1)[0] + '.json'
         s3.put_object(
             Bucket='bucket-json-clear',
