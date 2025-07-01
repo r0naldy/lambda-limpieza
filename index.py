@@ -7,7 +7,6 @@ from datetime import datetime
 
 s3 = boto3.client('s3')
 
-# Formatos de fecha aceptados
 DATE_FORMATS = [
     "%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y",
     "%m/%d/%Y %H:%M", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p"
@@ -36,7 +35,6 @@ def sanitize_text(value):
 def sanitize_phone(phone):
     if not phone:
         return None
-    # Quitar todo lo que no sea número, mantener el orden
     cleaned = re.sub(r'\D', '', phone)
     return cleaned if len(cleaned) >= 7 else None
 
